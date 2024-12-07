@@ -223,14 +223,22 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 	var posts []Post
 
 	for _, p := range results {
-		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
-		if err != nil {
-			return nil, err
-		}
+		// err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
+		// if err != nil {
+		// 	return nil, err
+		// }
 
 		comments, err := getComments(p, allComments)
 		if err != nil {
 			return nil, err
+		}
+		if allComments {
+			p.CommentCount = len(comments)
+		} else {
+			err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// ユーザー情報を取得 (キャッシュにはUser情報を含まないため、都度取得)
