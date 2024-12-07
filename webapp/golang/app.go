@@ -60,12 +60,13 @@ type Post struct {
 }
 
 type Comment struct {
-	ID        int       `db:"id"`
-	PostID    int       `db:"post_id"`
-	UserID    int       `db:"user_id"`
-	Comment   string    `db:"comment"`
-	CreatedAt time.Time `db:"created_at"`
-	User      User
+	ID          int       `db:"id"`
+	PostID      int       `db:"post_id"`
+	UserID      int       `db:"user_id"`
+	Comment     string    `db:"comment"`
+	CreatedAt   time.Time `db:"created_at"`
+	User        User
+	AccountName string `db:"account_name"`
 }
 
 var mc *memcache.Client
@@ -192,7 +193,7 @@ func getComments(p Post, allComments bool) ([]Comment, error) {
 	}
 
 	// キャッシュミス時: DBから取得
-	query := "SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC"
+	query := "SELECT c.`comment`, c.`created_at`, u.`account_name` FROM `comments` c JOIN `users` u ON c.`user_id`=u.`id` WHERE c.`post_id` = ? ORDER BY c.`created_at` DESC"
 	if !allComments {
 		query += " LIMIT 3"
 	}
@@ -234,10 +235,12 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 
 		// ユーザー情報を取得 (キャッシュにはUser情報を含まないため、都度取得)
 		for i := 0; i < len(comments); i++ {
-			err := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to fetch user data: %w", err)
-			}
+			// err := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
+			// if err != nil {
+			// 	return nil, fmt.Errorf("failed to fetch user data: %w", err)
+			//}
+			comments[i].User.AccountName = comments[i].AccountName
+			comments[i].User.ID = comments[i].UserID
 		}
 
 		// reverse
