@@ -2,6 +2,7 @@ package main
 
 import (
 	crand "crypto/rand"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -66,6 +67,8 @@ type Comment struct {
 	User      User
 }
 
+var mc *memcache.Client
+
 func init() {
 	memdAddr := os.Getenv("ISUCONP_MEMCACHED_ADDRESS")
 	if memdAddr == "" {
@@ -74,6 +77,7 @@ func init() {
 	memcacheClient := memcache.New(memdAddr)
 	store = gsm.NewMemcacheStore(memcacheClient, "iscogram_", []byte("sendagaya"))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	mc = memcache.New("127.0.0.1:11211") // Memcachedのホストとポート
 }
 
 func dbInitialize() {
@@ -180,20 +184,49 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 			return nil, err
 		}
 
-		query := "SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC"
-		if !allComments {
-			query += " LIMIT 3"
-		}
+		// キャッシュのキー生成
+		cacheKey := fmt.Sprintf("comments_post_%d_%t", p.ID, allComments)
+
+		// キャッシュから取得
+		item, err := mc.Get(cacheKey)
 		var comments []Comment
-		err = db.Select(&comments, query, p.ID)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			// キャッシュヒット時: JSONをデコードしてcommentsに格納
+			err = json.Unmarshal(item.Value, &comments)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode cache data: %w", err)
+			}
+		} else {
+			// キャッシュミス時: DBから取得
+			query := "SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC"
+			if !allComments {
+				query += " LIMIT 3"
+			}
+			err = db.Select(&comments, query, p.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch comments from DB: %w", err)
+			}
+
+			// キャッシュに保存
+			data, err := json.Marshal(comments)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode comments to cache: %w", err)
+			}
+			err = mc.Set(&memcache.Item{
+				Key:        cacheKey,
+				Value:      data,
+				Expiration: 30, // キャッシュの有効期限 (60秒)
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to set cache: %w", err)
+			}
 		}
 
+		// ユーザー情報を取得 (キャッシュにはUser情報を含まないため、都度取得)
 		for i := 0; i < len(comments); i++ {
 			err := db.Get(&comments[i].User, "SELECT * FROM `users` WHERE `id` = ?", comments[i].UserID)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to fetch user data: %w", err)
 			}
 		}
 
