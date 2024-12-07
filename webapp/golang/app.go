@@ -52,7 +52,6 @@ type Post struct {
 	Body         string    `db:"body"`
 	Mime         string    `db:"mime"`
 	CreatedAt    time.Time `db:"created_at"`
-	AccountName  string    `db:"account_name"`
 	CommentCount int
 	Comments     []Comment
 	User         User
@@ -238,14 +237,9 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 
 		p.Comments = comments
 
-		if "a" == "a" {
-			err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			p.User.AccountName = p.AccountName
-			p.User.ID = p.UserID
+		err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
+		if err != nil {
+			return nil, err
 		}
 		p.CSRFToken = csrfToken
 
@@ -424,7 +418,7 @@ func getIndex(w http.ResponseWriter, r *http.Request) {
 
 	results := []Post{}
 
-	query := "SELECT p.id, p.user_id, p.body, p.created_at, p.mime, u.account_name FROM posts AS p JOIN users AS u ON (p.user_id = u.id) WHERE u.del_flg = 0 ORDER BY p.created_at DESC LIMIT 20"
+	query := "SELECT p.id, p.user_id, p.body, p.created_at, p.mime FROM posts AS p JOIN users AS u ON (p.user_id = u.id) WHERE u.del_flg = 0 ORDER BY p.created_at DESC LIMIT 20"
 
 	err := db.Select(&results, query)
 	if err != nil {
