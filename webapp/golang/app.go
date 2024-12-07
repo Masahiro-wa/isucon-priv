@@ -227,7 +227,6 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		// if err != nil {
 		// 	return nil, err
 		// }
-
 		comments, err := getComments(p, allComments)
 		if err != nil {
 			return nil, err
