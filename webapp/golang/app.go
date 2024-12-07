@@ -176,6 +176,48 @@ func getFlash(w http.ResponseWriter, r *http.Request, key string) string {
 	}
 }
 
+func getComments(p Post, allComments bool) ([]Comment, error) {
+	cacheKey := fmt.Sprintf("comments_%d", p.ID)
+
+	// キャッシュから取得
+	item, err := mc.Get(cacheKey)
+	var comments []Comment
+	if err == nil {
+		// キャッシュヒット時: JSONをデコードしてcommentsに格納
+		err = json.Unmarshal(item.Value, &comments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode cache data: %w", err)
+		}
+		return comments, nil
+	}
+
+	// キャッシュミス時: DBから取得
+	query := "SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC"
+	if !allComments {
+		query += " LIMIT 3"
+	}
+	err = db.Select(&comments, query, p.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch comments from DB: %w", err)
+	}
+
+	// キャッシュに保存
+	data, err := json.Marshal(comments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode comments to cache: %w", err)
+	}
+	err = mc.Set(&memcache.Item{
+		Key:        cacheKey,
+		Value:      data,
+		Expiration: 60, // キャッシュの有効期限を設定（例: 60秒）
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set cache: %w", err)
+	}
+
+	return comments, nil
+}
+
 func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, error) {
 	var posts []Post
 
@@ -185,42 +227,9 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 			return nil, err
 		}
 
-		// キャッシュのキー生成
-		cacheKey := fmt.Sprintf("comments_post_%d_%t", p.ID, allComments)
-
-		// キャッシュから取得
-		item, err := mc.Get(cacheKey)
-		var comments []Comment
-		if err == nil {
-			// キャッシュヒット時: JSONをデコードしてcommentsに格納
-			err = json.Unmarshal(item.Value, &comments)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode cache data: %w", err)
-			}
-		} else {
-			// キャッシュミス時: DBから取得
-			query := "SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC"
-			if !allComments {
-				query += " LIMIT 3"
-			}
-			err = db.Select(&comments, query, p.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to fetch comments from DB: %w", err)
-			}
-
-			// キャッシュに保存
-			data, err := json.Marshal(comments)
-			if err != nil {
-				return nil, fmt.Errorf("failed to encode comments to cache: %w", err)
-			}
-			err = mc.Set(&memcache.Item{
-				Key:        cacheKey,
-				Value:      data,
-				Expiration: 30, // キャッシュの有効期限 (30秒)
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to set cache: %w", err)
-			}
+		comments, err := getComments(p, allComments)
+		if err != nil {
+			return nil, err
 		}
 
 		// ユーザー情報を取得 (キャッシュにはUser情報を含まないため、都度取得)
