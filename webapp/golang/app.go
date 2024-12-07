@@ -238,12 +238,15 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 
 		p.Comments = comments
 
-		// err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
-		// if err != nil {
-		// 	return nil, err
-		// }
-		p.User.AccountName = p.AccountName
-		p.User.ID = p.UserID
+		if p.AccountName == "" {
+			err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			p.User.AccountName = p.AccountName
+			p.User.ID = p.UserID
+		}
 		p.CSRFToken = csrfToken
 
 		// if p.User.DelFlg == 0 {
