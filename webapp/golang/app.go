@@ -381,12 +381,12 @@ func getIndex(w http.ResponseWriter, r *http.Request) {
 
 	query := `
 	SELECT 
-		p.id, 
-		p.user_id, 
-		p.body, 
-		p.created_at, 
-		p.mime, 
-		u.account_name 
+		p.id as id, 
+		p.user_id as user_id, 
+		p.body as body, 
+		p.created_at as created_at, 
+		p.mime as mime, 
+		u.account_name as account_name 
 	FROM 
 		posts AS p 
 	JOIN 
