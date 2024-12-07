@@ -51,7 +51,6 @@ type Post struct {
 	Body         string    `db:"body"`
 	Mime         string    `db:"mime"`
 	CreatedAt    time.Time `db:"created_at"`
-	AccountName  string    `db:"account_name"`
 	CommentCount int
 	Comments     []Comment
 	User         User
@@ -209,9 +208,15 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		if err != nil {
 			return nil, err
 		}
-		// p.User.ID = p.UserID
-		// p.User.AccountName = p.AccountName
+
 		p.CSRFToken = csrfToken
+
+		if p.User.DelFlg == 0 {
+			posts = append(posts, p)
+		}
+		if len(posts) >= postsPerPage {
+			break
+		}
 	}
 
 	return posts, nil
@@ -381,28 +386,7 @@ func getIndex(w http.ResponseWriter, r *http.Request) {
 
 	results := []Post{}
 
-	query := `
-	SELECT 
-		p.id as id, 
-		p.user_id as user_id, 
-		p.body as body, 
-		p.created_at as created_at, 
-		p.mime as mime, 
-		u.account_name as account_name 
-	FROM 
-		posts AS p 
-	JOIN 
-		users AS u 
-	ON 
-		(p.user_id = u.id) 
-	WHERE 
-		u.del_flg = 0 
-	ORDER BY 
-		p.created_at DESC 
-	LIMIT 20
-	`
-
-	err := db.Select(&results, query)
+	err := db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC")
 	if err != nil {
 		log.Print(err)
 		return
@@ -710,13 +694,6 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write(post.Imgdata)
 		if err != nil {
 			log.Print(err)
-			return
-		}
-		filePath := fmt.Sprintf("/home/isucon/isucon-priv/webapp/public/image/%d.%s", pid, ext)
-		err = os.WriteFile(filePath, post.Imgdata, 0644)
-		if err != nil {
-			log.Print(err)
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		return
