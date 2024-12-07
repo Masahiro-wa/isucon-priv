@@ -696,6 +696,13 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 			log.Print(err)
 			return
 		}
+		filePath := fmt.Sprintf("/home/isucon/isucon-priv/webapp/public/image/%d.%s", pid, ext)
+		err = os.WriteFile(filePath, post.Imgdata, 0644)
+		if err != nil {
+			log.Print(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
